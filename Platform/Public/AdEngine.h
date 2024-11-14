@@ -16,7 +16,10 @@
 #include <queue>
 #include <deque>
 #include <set>
+#include <unordered_set>
 #include <unordered_map>
+
+#define ARRAY_SIZE(r)                   (sizeof(r) / sizeof(r[0]))
 
 #ifdef AD_ENGINE_PLATFORM_WIN32
 //Windows
@@ -29,7 +32,7 @@
 #define VK_USE_PLATFORM_XCB_KHR
 
 #else
-#error Unsuppots this Platform
+    #error Unsuppots this Platform
 #endif
 
 #define AD_ENGINE_GRAPHIC_API_VULKAN

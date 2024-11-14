@@ -4,6 +4,7 @@
 #include "AdEngine.h"
 
 namespace ade {
+    class AdWindow;
     class AdGraphicContext {
     public:
         AdGraphicContext(const AdGraphicContext &) = delete;
@@ -12,7 +13,7 @@ namespace ade {
 
         virtual ~AdGraphicContext() = default;
 
-        static std::unique_ptr<AdGraphicContext> Create();
+        static std::unique_ptr<AdGraphicContext> Create(AdWindow *window);
 
     protected:
         AdGraphicContext() = default;

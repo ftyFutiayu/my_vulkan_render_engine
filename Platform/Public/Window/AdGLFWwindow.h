@@ -19,6 +19,8 @@ namespace ade {
 
         void SwapBuffer() override;
 
+        GLFWwindow *GetWindowHandle() const { return mGLFWwindow; }
+
     private:
         GLFWwindow *mGLFWwindow;
     };
