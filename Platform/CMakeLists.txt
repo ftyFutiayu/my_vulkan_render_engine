@@ -7,6 +7,8 @@ add_library(adiosy_platform
 
         Private/AdGraphicContext.cpp
         Private/Graphic/AdVKGraphicContext.cpp
+        Private/Graphic/AdVkDevice.cpp
+        Private/Graphic/AdQueue.cpp
 )
 
 target_include_directories(adiosy_platform PUBLIC External)

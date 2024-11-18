@@ -26,6 +26,8 @@ namespace ade {
         CreateInstance();
 
         CreateSurface(window);
+
+        SelectPhysicalDevice();
     }
 
     AdVKGraphicContext::~AdVKGraphicContext() {
@@ -157,5 +159,147 @@ namespace ade {
         }
         CALL_VK(glfwCreateWindowSurface(mInstance, glfwWindow->GetWindowHandle(), nullptr, &mSurface));
         LOG_T("{0} : surface : {1}", __FUNCTION__, (void *) mSurface);
+    }
+
+    // 渲染物理设备
+    void AdVKGraphicContext::SelectPhysicalDevice() {
+        uint32_t physicalDeviceCount = 0;
+        CALL_VK(vkEnumeratePhysicalDevices(mInstance, &physicalDeviceCount, nullptr));
+        VkPhysicalDevice physicalDevice[physicalDeviceCount];
+        CALL_VK(vkEnumeratePhysicalDevices(mInstance, &physicalDeviceCount, physicalDevice));
+
+        // 物理设备打分
+        uint32_t maxScore = 0;
+        int32_t maxScorePhysicalDeviceIndex = -1;
+
+        LOG_D("-----------------------------");
+        LOG_D("Physical devices: ");
+
+        for (int i = 0; i < physicalDeviceCount; i++) {
+            VkPhysicalDeviceProperties properties;
+            vkGetPhysicalDeviceProperties(physicalDevice[i], &properties);
+            PrintPhysicalDeviceInfo(properties);
+            auto score = GetPhysicalDeviceScore(properties);
+
+            uint32_t formatCount;
+            CALL_VK(vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice[i], mSurface, &formatCount, nullptr));
+            VkSurfaceFormatKHR surfaceFormat[formatCount];
+            CALL_VK(vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice[i], mSurface, &formatCount, surfaceFormat));
+            for (int j = 0; j < formatCount; j++) {
+                if (surfaceFormat[j].format == VK_FORMAT_B8G8R8A8_UNORM &&
+                    surfaceFormat[j].colorSpace == VK_COLORSPACE_SRGB_NONLINEAR_KHR) {
+                    score += 10;
+                    break;
+                }
+            }
+
+            // 查询队列族
+            uint32_t queueCount;
+            vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice[i], &queueCount, nullptr);
+            VkQueueFamilyProperties queueFamilyProperties[queueCount];
+            vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice[i], &queueCount, queueFamilyProperties);
+            LOG_D("score    --->    : {0}", score);
+            LOG_D("queue family     : {0}", queueCount);
+
+            if (score < maxScore) {
+                continue;
+            }
+
+            for (int j = 0; j < queueCount; j++) {
+                if (queueFamilyProperties[j].queueCount == 0) {
+                    continue;
+                }
+                // 找到显示和图形队列
+                // 1. Graphics
+                if (queueFamilyProperties[j].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+                    mGraphicQueueFamily.queueCount = queueFamilyProperties[j].queueCount;
+                    mGraphicQueueFamily.queueFamilyIndex = j;
+                }
+
+                // 如果找到不一样的图形和显示队列，直接退出循环
+                if (mGraphicQueueFamily.queueFamilyIndex >= 0 && mPresentQueueFamily.queueFamilyIndex >= 0
+                    && mGraphicQueueFamily.queueFamilyIndex != mPresentQueueFamily.queueFamilyIndex) {
+                    break;
+                }
+
+                // 2. Present
+                VkBool32 bSuppportSurface;
+                vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice[i], j, mSurface, &bSuppportSurface);
+                if (bSuppportSurface) {
+                    mPresentQueueFamily.queueCount = queueFamilyProperties[j].queueCount;
+                    mPresentQueueFamily.queueFamilyIndex = j;
+                }
+            }
+
+            if (mPresentQueueFamily.queueFamilyIndex >= 0 && mPresentQueueFamily.queueFamilyIndex >= 0) {
+                maxScorePhysicalDeviceIndex = i;
+                maxScore = score;
+            }
+        }
+        LOG_D("-----------------------------");
+
+
+        if (maxScorePhysicalDeviceIndex < 0) {
+            LOG_W("May can not fine a suitable physical device");
+            maxScorePhysicalDeviceIndex = 0;
+        }
+
+        mPhysicalDevice = physicalDevice[maxScorePhysicalDeviceIndex];
+
+        // 查询物理设备内存属性
+        vkGetPhysicalDeviceMemoryProperties(mPhysicalDevice, &mPhysicalDeviceMemoryProperties);
+
+        LOG_T("{0} : physical device:{1}, score:{2}, graphic queue: {3} : {4}, present queue: {5} : {6}", __FUNCTION__,
+              maxScorePhysicalDeviceIndex, maxScore,
+              mGraphicQueueFamily.queueFamilyIndex, mGraphicQueueFamily.queueCount,
+              mPresentQueueFamily.queueFamilyIndex, mPresentQueueFamily.queueCount);
+    }
+
+    void AdVKGraphicContext::PrintPhysicalDeviceInfo(VkPhysicalDeviceProperties &properties) {
+        const char *deviceType = properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU ? "integrated gpu" :
+                                 properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU ? "discrete gpu" :
+                                 properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU ? "virtual gpu" :
+                                 properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_CPU ? "cpu" : "others";
+
+        uint32_t driverVersionMajor = VK_VERSION_MAJOR(properties.driverVersion);
+        uint32_t driverVersionMinor = VK_VERSION_MINOR(properties.driverVersion);
+        uint32_t driverVersionPatch = VK_VERSION_PATCH(properties.driverVersion);
+
+        uint32_t apiVersionMajor = VK_VERSION_MAJOR(properties.apiVersion);
+        uint32_t apiVersionMinor = VK_VERSION_MINOR(properties.apiVersion);
+        uint32_t apiVersionPatch = VK_VERSION_PATCH(properties.apiVersion);
+
+        LOG_D("-----------------------------");
+        LOG_D("deviceName       : {0}", properties.deviceName);
+        LOG_D("deviceType       : {0}", deviceType);
+        LOG_D("vendorID         : {0}", properties.vendorID);
+        LOG_D("deviceID         : {0}", properties.deviceID);
+        LOG_D("driverVersion    : {0}.{1}.{2}", driverVersionMajor, driverVersionMinor, driverVersionPatch);
+        LOG_D("apiVersion       : {0}.{1}.{2}", apiVersionMajor, apiVersionMinor, apiVersionPatch);
+    }
+
+    uint32_t AdVKGraphicContext::GetPhysicalDeviceScore(VkPhysicalDeviceProperties &properties) {
+        VkPhysicalDeviceType deviceType = properties.deviceType;
+        uint32_t score = 0;
+        // 设备类型
+        switch (deviceType) {
+            case VK_PHYSICAL_DEVICE_TYPE_OTHER:
+                break;
+            case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU:
+                score += 50;
+                break;
+            case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU:
+                score += 40;
+                break;
+            case VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU:
+                score += 20;
+                break;
+            case VK_PHYSICAL_DEVICE_TYPE_CPU:
+                score += 10;
+                break;
+            case VK_PHYSICAL_DEVICE_TYPE_MAX_ENUM:
+                break;
+        }
+        return score;
     }
 }

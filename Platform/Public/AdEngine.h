@@ -20,6 +20,7 @@
 #include <unordered_map>
 
 #define ARRAY_SIZE(r)                   (sizeof(r) / sizeof(r[0]))
+#define __FILENAME__                    (strrchr(__FILE__, '/') + 1)
 
 #ifdef AD_ENGINE_PLATFORM_WIN32
 //Windows
