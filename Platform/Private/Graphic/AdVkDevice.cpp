@@ -121,4 +121,9 @@ AdVKDevice::AdVKDevice(AdVKGraphicContext *context,
     }
 }
 
+AdVKDevice::~AdVKDevice() {
+    // 销毁设备之前确保所有队列的命令执行完毕
+    vkDeviceWaitIdle(mDevice);
+    vkDestroyDevice(mDevice, nullptr);
+}
 
